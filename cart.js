@@ -8,8 +8,9 @@ const Cart=mongoose.model("Cart", new mongoose.Schema({
         productId:String,
         quantity:Number,
     }
-    ]
-}))
+    ],
+    updatedAt: { type: Date, default: Date.now } // Add updatedAt field
+}));
 
 router.post("/cart/add", async (req, res)=>{
     try{
@@ -67,49 +68,68 @@ router.get("/carts",async (req,res)=>{
         })
     }
 })
+;
 
-router.delete("/cart/:userId/:id", async (req, res) => {
-    const { userId, id } = req.params;
-    try {
-      const cart = await Cart.findOne({ userId });
-  
-      if (!cart) {
-        return res.status(404).json({ error: "Couldn't find cart" });
-      }
-  
-      // Check if product exists in cart
-      const productInCart = cart.items.find(item => item.productId === id);
-      if (!productInCart) {
-        return res.status(400).json({ message: "Item is not present in cart" });
-      }
-  
-      // Remove the item
-      cart.items = cart.items.filter(item => item.productId !== id);
-      cart.updatedAt = new Date();
-  
-      // If no items left, delete the whole cart
-      if (cart.items.length === 0) {
-        await Cart.deleteOne({ _id: cart._id });
-        return res.status(200).json({
-          success: true,
-          message: "Product removed and cart deleted (empty)"
-        });
-      } else {
-        await cart.save();
-        return res.status(200).json({
-          success: true,
-          message: "Product removed from cart"
-        });
-      }
-  
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        message: "Failed to delete item",
-        error: err.message,
-      });
+router.delete("/cart/:userId/:productId", async (req, res) => {
+  const { userId, productId } = req.params;
+
+  console.log(`Received request to delete product ${productId} from user ${userId}'s cart`);
+
+  try {
+    const carts = await Cart.find({ userId });
+
+    if (carts.length === 0) {
+      return res.status(404).json({ error: "Couldn't find any carts for this user" });
     }
-  });
-  
 
-module.exports=router;
+    console.log("Current carts for user:", JSON.stringify(carts, null, 2));
+
+    let productRemoved = false;
+
+    for (const cart of carts) {
+      console.log(`Processing cart ID: ${cart._id}`);
+
+      const productIndex = cart.items.findIndex(item => item.productId === productId);
+      if (productIndex !== -1) {
+        console.log(`Found product ${productId} in cart ${cart._id}`);
+
+        cart.items.splice(productIndex, 1);
+        cart.updatedAt = new Date();
+
+        console.log("Updated items in cart after removal:", cart.items);
+
+        if (cart.items.length === 0) {
+          await Cart.deleteOne({ _id: cart._id });
+          console.log(`Cart ${cart._id} deleted as it is empty.`);
+        } else {
+          await cart.save();
+          console.log(`Product removed from cart ${cart._id}.`);
+        }
+
+        productRemoved = true;
+        break; // Exit the loop after removing the first occurrence
+      } else {
+        console.log(`Product ${productId} not found in cart ${cart._id}`);
+      }
+    }
+
+    if (!productRemoved) {
+      return res.status(400).json({ message: "Item is not present in any cart" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Product removed from cart"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete item",
+      error: err.message,
+    });
+  }
+});
+
+module.exports = router;

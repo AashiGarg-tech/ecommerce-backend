@@ -38,6 +38,7 @@ mongoose.connect(process.env.MONGO_URI, {useNewUrlParser:true, useUnifiedTopolog
       if(!product){
         return res.status(404).json({message: "the items don't exist"})
       }
+      res.json(product);
     }catch(err){
       res.status(500).json({error: "Internal Server Error"});
     }
